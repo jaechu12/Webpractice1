@@ -10,7 +10,7 @@
     <form action="/process/login" method="post">
         <table>
             <tr>
-                <td><label>아이디</label></td>
+                <td><label>이메일</label></td>
                 <td><input type="text" name="id"></td>
             </tr>
             <tr>
