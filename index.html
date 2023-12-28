@@ -1,111 +1,175 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>간단한 2D 메타버스 (마우스 클릭 이동 - 부드러운 이동)</title>
-</head>
-<body>
-    <h1>간단한 2D 메타버스 (마우스 클릭 이동 - 부드러운 이동)</h1>
+var express = require('express');
+var path = require('path');
+var favicon = require('serve-favicon');
+var logger = require('morgan');
+var cookieParser = require('cookie-parser');
+var bodyParser = require('body-parser');
+var expressSession = require('express-session');
+var expressErrorHandler = require('express-error-handler');
+var mongodb = require('mongodb');
 
-    <!-- Canvas 추가 -->
-    <canvas id="gameCanvas" width="800" height="600" style="background-color: #008282;"></canvas>
+var app = express();
 
-    <!-- JavaScript 코드 추가 -->
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const context = canvas.getContext('2d');
+// view engine setup
+app.set('views', path.join(__dirname, 'views'));
+app.set('view engine', 'jade');
 
-        // 스프라이트 시트 이미지
-        const spriteSheet1 = new Image();
-        spriteSheet1.src = ' https://img1.daumcdn.net/thumb/R1280x0/?scode=mtistory2&fname=https%3A%2F%2Fblog.kakaocdn.net%2Fdn%2FcgN8e0%2FbtsuWYLldS3%2FFApSahT2XKzJKBNkM3CqZk%2Fimg.png'; // 첫 번째 스프라이트 시트 이미지 경로
+app.use(logger('dev'));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({
+  extended: true
+}));
+app.use(cookieParser());
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(expressSession({
+  secret: 'my key',
+  resave: true,
+  saveUninitialized: true
+}));
 
-        const spriteSheet2 = new Image();
-        spriteSheet2.src = ' https://img1.daumcdn.net/thumb/R1280x0/?scode=mtistory2&fname=https%3A%2F%2Fblog.kakaocdn.net%2Fdn%2F4n9Xf%2FbtsuZ3FDxE3%2F9XOn7ggiu0xFJJ5kOgELu0%2Fimg.png'; // 두 번째 스프라이트 시트 이미지 경로
+// mongodb connection
+var database;
 
-        // 스프라이트 프레임 크기
-        const frameWidth = 75;
-        const frameHeight = 93;
+function connectDB() {
+  var databaseUrl = 'mongodb://localhost:27017/shopping';
+  mongodb.connect(databaseUrl, function(err, db) {
+    if (err) {
+      throw err;
+    }
+    console.log('데이터베이스에 연결되었습니다.:' + databaseUrl);
+    database = db;
+  });
+}
 
-        // 현재 프레임 위치
-        let currentFrame = 0;
+connectDB();
 
-        // 플레이어 초기 위치
-        let playerX = canvas.width / 2;
-        let playerY = canvas.height / 2;
 
-        // 목표 위치
-        let targetX = playerX;
-        let targetY = playerY;
+// check id, password
+var authUser = function(database, id, password, callback) {
+  console.log('authUser 호출');
 
-        // 이동 속도 (클릭마다 이동되는 거리)
-        const moveSpeed = 4;
+  var users = database.collection('users');
 
-        // 클릭한 위치로 이동
-        canvas.addEventListener('click', (event) => {
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = event.clientX - rect.left;
-            const mouseY = event.clientY - rect.top;
+  users.find({
+    "id": id,
+    "password": password
+  }).toArray(function(err, docs) {
+    if (err) {
+      callback(err, null);
+      return;
+    }
 
-            // 목표 위치 업데이트
-            targetX = mouseX - frameWidth / 2;
-            targetY = mouseY - frameHeight / 2;
-        });
+    if (docs.length > 0) {
+      console.log('아이디 [%s], 비밀번호 [%s]가 일치하는 사용자 찾음.', id, password);
+      callback(null, docs);
+    } else {
+      console.log('일치하는 사용자를 찾지 못함');
+      callback(null, null);
+    }
+  });
+};
 
-        // 게임 루프
-        function gameLoop() {
-            clearCanvas();
-            movePlayer();
-            drawPlayer(spriteSheet1); // 첫 번째 스프라이트 시트 그리기
-            drawPlayer(spriteSheet2); // 두 번째 스프라이트 시트 그리기
-            requestAnimationFrame(gameLoop);
-        }
+app.post('/process/login', function(req, res) {
+  console.log('/process/login 호출됨');
+  var paramId = req.param('id');
+  var paramPassword = req.param('password');
 
-        // Canvas 지우기
-        function clearCanvas() {
-            context.clearRect(0, 0, canvas.width, canvas.height);
-        }
+  if (database) {
+    authUser(database, paramId, paramPassword, function(err, docs) {
+      if (err) {
+        throw err;
+      }
 
-        // 플레이어 이동
-        function movePlayer() {
-            // 현재 위치에서 목표 위치로 부드럽게 이동
-            const dx = targetX - playerX;
-            const dy = targetY - playerY;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+      if (docs) {
+        console.dir(docs);
 
-            if (distance > moveSpeed) {
-                const ratio = moveSpeed / distance;
-                playerX += dx * ratio;
-                playerY += dy * ratio;
+        res.writeHead('200', {'Content-Type': 'text/html; charset=utf8'});
+        res.write('<h1>로그인 성공</h1>');
+        res.write('<div><p>사용자 아이디 : '+ paramId +' </p></div>');
+        res.write('<div><p>사용자 이름 : '+ docs[0].name+' </p></div>');
+        res.write('<br><br><a href="/html/login.html">다시 로그인하기</a>');
+        res.end();
+      } else {
+        res.writeHead('200', {'Content-Type': 'text/html; charset=utf8'});
+        res.write('<h1>로그인 실패</h1>');
+        res.write('<div><p>사용자 아이디와 비밀번호를 확인하십시오 </p></div>');
+        res.write('<br><br><a href="/html/login.html">다시 로그인하기</a>');
+        res.end();
+      }
+    });
+  } else {
+    res.writeHead('200', {'Content-Type': 'text/html; charset=utf8'});
+    res.write('<h2>데이터베이스 연결 실패</h2>');
+    res.write('<div><p>데이터베이스에 연결 하지 못했습니다.</p></div>');
+    res.end();
+  }
+});
 
-                // 이동 중에만 프레임 변경
-                currentFrame = (currentFrame + 1) % (spriteSheet1.width / frameWidth);
-            } else {
-                // 목표 위치에 도착하면 정지한 상태에서 첫 번째 프레임으로 고정
-                currentFrame = 0;
-            }
-        }
+// app.post('process/login', function(req, res) {
+//   console.log('/process/login 호출됨');
+  // var paramId = req.param('id');
+  // var paramPassword = req.param('password');
+  //
+  // if (database) {
+  //   authUser(database, paramId, paramPassword, function(err, docs) {
+  //     if (err) {
+  //       throw err;
+  //     }
+  //
+  //     if (docs) {
+  //       console.dir(docs);
+  //
+  //       res.writeHead('200', {'Content-Type': 'text/html; charset=utf8'});
+  //       res.write('<h1>로그인 성공</h1>');
+  //       res.write('<div><p>사용자 아이디 : '+paramId+' </p></div>');
+  //       res.write('<div><p>사용자 이름 : '+ username+' </p></div>');
+  //       res.write('<br><br><a href="/html/login.html">다시 로그인하기</a>');
+  //       res.end();
+  //     } else {
+  //       res.writeHead('200', {'Content-Type': 'text/html; charset=utf8'});
+  //       res.write('<h1>로그인 실패</h1>');
+  //       res.write('<div><p>사용자 아이디와 비밀번호를 확인하십시오 </p></div>');
+  //       res.write('<br><br><a href="/html/login.html">다시 로그인하기</a>');
+  //       res.end();
+  //     }
+  //   });
+  // } else {
+  //   res.writeHead('200', {'Content-Type': 'text/html; charset=utf8'});
+  //   res.write('<h2>데이터베이스 연결 실패</h2>');
+  //   res.write('<div><p>데이터베이스에 연결 하지 못했습니다.</p></div>');
+  //   res.end();
+  // }
+// });
 
-        // 플레이어 그리기
-        function drawPlayer(spriteSheet) {
-            // 스프라이트 시트에서 현재 프레임을 그립니다.
-            context.drawImage(
-                spriteSheet,
-                currentFrame * frameWidth,
-                0,
-                frameWidth,
-                frameHeight,
-                playerX,
-                playerY,
-                frameWidth,
-                frameHeight
-            );
-        }
+var errorHandler = expressErrorHandler({
+  static: {
+    '404': './public/html/404.html'
+  }
+});
 
-        // 스프라이트 시트 이미지 로딩 후 게임 시작
-        spriteSheet1.onload = function () {
-            gameLoop(); // 이미지가 로드된 후에 게임 루프 시작
-        };
-    </script>
-</body>
-</html>
+app.use(expressErrorHandler.httpError(404));
+app.use(errorHandler);
+
+
+// app.use('/', index);
+// app.use('/users', users);
+
+// // catch 404 and forward to error handler
+// app.use(function(req, res, next) {
+//   var err = new Error('Not Found');
+//   err.status = 404;
+//   next(err);
+// });
+//
+// // error handler
+// app.use(function(err, req, res, next) {
+//   // set locals, only providing error in development
+//   res.locals.message = err.message;
+//   res.locals.error = req.app.get('env') === 'development' ? err : {};
+//
+//   // render the error page
+//   res.status(err.status || 500);
+//   res.render('error');
+// });
+
+module.exports = app;
