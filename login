@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <meta charset="utf-8">
     <title>로그인</title>
@@ -10,7 +9,7 @@
     <form action="/process/login" method="post">
         <table>
             <tr>
-                <td><label>이메일</label></td>
+                <td><label>아이디</label></td>
                 <td><input type="text" name="id"></td>
             </tr>
             <tr>
